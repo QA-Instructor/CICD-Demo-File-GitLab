@@ -1,0 +1,62 @@
+# A BUILD stage to confirm the React App Builds
+# A TEST stage to run any React tests
+# A DOCKER-BUILD stage to containerize the app using a Dockerfile and push the image to the Container Registry
+# A DEPLOY stage to pull the image onto an AWS EC2 instance and spin up a container
+stages:
+  - build
+  - test
+  - docker-build
+  - deploy
+
+build:
+  stage: build
+  image: node
+  script:
+    - echo "Start building App"
+    - npm install
+    - npm run build
+    - echo "Built successfully!"
+  artifacts:
+    expire_in: 1 hour
+    paths:
+      - build
+      - node_modules/
+
+test:
+  stage: test
+  image: node
+  script:
+    - echo "Testing App"
+    - CI=true npm test
+    - echo "Tested successfully!"
+
+docker-build:
+  stage: docker-build
+  # this version of docker is used to prevent 'access denied' errors when connecting from EC2
+  image: docker:19.03.12
+  services:
+    - name: docker:19.03.12-dind
+  before_script:
+    # login to GitLab's docker registry using the built-in stored credentials
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    # Build the image from the Dockerfile. Ensure the base images are up-to-date by pulling the
+    # latest images referenced
+    # Tag the image with the address of the project's Container Registry
+    - docker build --pull -t "$CI_REGISTRY_IMAGE" .
+    # Push the new image to the Container Registry
+    - docker push "$CI_REGISTRY_IMAGE"
+
+deploy:
+  stage: deploy
+  # need an image that will enable us to ssh int our cloud server
+  image: kroniak/ssh-client
+  before_script:
+    - echo "deploying app"
+  # need variables in gitlab: SSH_PRIVATE_KEY and PROD_SERVER_IP
+  script:
+    - chmod 400 $SSH_PRIVATE_KEY
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "docker pull registry.gitlab.com/toria/vat-calculator"
+    - echo "Pulled"
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "docker stop vatcontainer || true && docker rm vatcontainer || true"
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "docker run -p 3001:80 -d --name vatcontainer registry.gitlab.com/toria/vat-calculator"
