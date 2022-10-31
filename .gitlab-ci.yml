@@ -56,6 +56,11 @@ deploy:
   # need variables in gitlab: SSH_PRIVATE_KEY and PROD_SERVER_IP
   script:
     - chmod 400 $SSH_PRIVATE_KEY
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "echo 'hello from your AWS EC2 instance'"
+    - echo "Did I connect to EC2?"
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "echo 'try to peform a docker login'"
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "sudo docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY"
+
     - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "sudo docker pull registry.gitlab.com/toria/vat-calculator"
     - echo "Pulled"
     - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY ec2-user@$PROD_SERVER_IP "docker stop vatcontainer || true && docker rm vatcontainer || true"
